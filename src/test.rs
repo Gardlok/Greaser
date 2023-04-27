@@ -1,4 +1,3 @@
-
 use futures::{
     stream::FuturesOrdered as ord_futs, stream::FuturesUnordered as unord_futs, Future, StreamExt,
 };
@@ -8,6 +7,8 @@ use std::collections::HashMap;
 use tokio::sync::broadcast::{
     channel as bc_channel, Receiver as BroadCastRx, Sender as BroadCastTx,
 };
+
+use crate::Engine;
 /*
 Engine
     .fire_up(3)
@@ -25,49 +26,6 @@ Engine
     .get_set(|id_set| { do_something(id_set) })
     .go()
 */
-///////////////
-
-
-
-
-pub async fn test_8(i: usize) -> usize {
-    i
-}
-
-pub async fn test_7(mut rx: BroadCastRx<BroadCastTx<usize>>) -> usize {
-    let tx = rx.recv().await;
-    let tx = tx.unwrap();
-    let _ = tx.send(0);
-    0
-}
-
-pub struct Prepper {
-    name: String,
-    funcs: unord_futs<DynFut<usize>>,
-}
-//////////////////////////////////////////////
-impl Prepper {
-    pub async fn test_fn(mut self) -> usize {
-        self.funcs.next().await.unwrap()
-    }
-    pub fn test_grp(self) {
-        let (tx, rx) = bc_channel(5);
-        let (tx2, _) = bc_channel(5);
-        self.funcs.push(Box::pin(test_8(0)));
-        self.funcs.push(Box::pin(test_7(rx)));
-        let _ = tx.send(tx2);
-    }
-}
-/
-
-
-
-
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -79,3 +37,16 @@ mod tests {
         let eng = Engine::start();
     }
 }
+
+/*///////////////
+pub async fn test_8(i: usize) -> usize {
+    i
+}
+impl Prepper {
+    pub async fn test_fn(mut self) -> usize {
+        self.funcs.next().await.unwrap()
+    }
+    pub fn test_grp(self) {
+        self.funcs.push(Box::pin(test_8(0)));
+    }
+}*/

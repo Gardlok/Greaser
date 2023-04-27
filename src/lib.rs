@@ -1,3 +1,4 @@
+#![feature(associated_type_bounds)]
 #[allow(
     missing_docs,
     missing_debug_implementations,
@@ -5,220 +6,149 @@
     unused_imports,
     unsafe_op_in_unsafe_fn
 )]
-use futures::task::FutureObj;
-use futures::FutureExt;
+//
+use tokio::runtime::{Builder, Handle as RtHandle, Runtime};
 use tokio::sync::broadcast::{
-    channel as bc_channel, Receiver as BroadCastRx, Sender as BroadCastTx,
+    channel as bc_channel,   //
+    Receiver as BroadCastRx, //
+    Sender as BroadCastTx,   //
 };
 use tokio::sync::watch::{channel as w_channel, Receiver as WatchRx, Sender as WatchTx};
-use tokio::sync::Barrier;
-use tokio::sync::OnceCell;
-
-use tokio::runtime::{Builder, Handle as RtHandle, Runtime};
+use tokio::sync::{Barrier, OnceCell};
 use tokio::task::{spawn, AbortHandle, JoinHandle, JoinSet};
 use tokio::task_local;
 use tokio::time::{Duration, Instant};
-
+//
 use futures::{
-    stream::FuturesOrdered as ord_futs, stream::FuturesUnordered as unord_futs, Future, StreamExt,
+    stream::FuturesOrdered as ord_futs,     //
+    stream::FuturesUnordered as unord_futs, //
+    task::FutureObj,                        //
+    Future,                                 //
+    FutureExt,                              //
+    StreamExt,                              //
 };
-
+use std::borrow::BorrowMut;
+//
 use std::collections::HashMap;
-use std::fmt;
+use std::iter::OnceWith;
+use std::marker::PhantomData;
 use std::pin::Pin;
-mod test;
 
+use thiserror::Error;
+
+mod builder;
+mod crafting;
+mod test;
+use builder::parameter::Param;
+use crafting::{DataCraft as DC, EdgeCraft as LC, NodeCraft as NC};
 /////////////////////////////////////////////
 // Types
-type RunTime<T> = ::std::pin::Pin<Box<dyn Send + Future<Output = T>>>;
-type Task<T> = ::std::pin::Pin<Box<dyn Send + Future<Output = T>>>;
 
+type Func<T> = Pin<Box<dyn Future<Output = Result<Node, ()>>>>;
+type Sharedcast = (BroadCastTx<()>, BroadCastRx<()>);
+impl trythat for Node {}
 /////////////////////////////////////////////
 // Primary logic and work flow
-pub struct Matrices<T> {
-    // Primary cfg, Running data, Methods, and Node Handles.
-    // Responsible for Node creation, oversight, and cleanup.
+pub struct Matrices {
+    // Map of Node ID to a copy of individual node Matrisync
+    // objects. Any node operating in any scope must have a
+    // copy of their matrisync in this map
+    msyncs: HashMap<Node<(), ()>, Vec<Matrisync<(), ()>>>,
+    // Store the runtimes and tasks in their async function form
+    //mfuncs: [Func],
     //
-    nodes: HashMap<usize, Vec<Node>>,
-    funcs: HashMap<RunTime<T>, Vec<Task<T>>>,
+    // Temp experiment /////////////////////////////////////////
+    // msyncs: Pin<Box<HashMap<Nid, Vec<Matrisync<NodeType>>>>>,
+    mfuncs: Pin<Box<[Func<()>]>>, //
+    ////////////////////////////////////////////////////////////
+    // Create/store a MPMC channel to be distrobuted among the
+    // nodes. For systematic purpose, this will be the _shared_
+    // copy while a seperate copy will be used for the Matrices
+    // deticated root channel.
+    sharedcast: LC::SharedCast<LC::Watch<()>>,
 }
 
-impl<T> Matrices<T>
-where
-    T: Send,
-{
-    pub fn add(mut self, node: Node) -> Result<(), ()> {
-        self.nodes
-            .entry(0)
-            .and_modify(|v| v.push(node))
-            .or_insert(vec![node]);
-        Ok(())
-    }
+impl Matrices {
+    // pub fn add(&mut self, msync: Matrisync<NC::NodeType>) -> Result<(), ()> {
+    //     let x = self
+    //         .msyncs
+    //         .entry(msync.id.get().clone())
+    //         //.and_modify(|v| v.push(msync))
+    //         .or_insert(vec![msync]);
+
+    //     Ok(())
+    // }
+    // pub fn new_node(self) -> Node {
+    //     Node(0)
+    // }
 }
 
-// Build Node
-#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
-pub enum ConfigurationProgress<T> {
-    NotSet(T),
-    AllSet(T),
-}
-type CP<T> = ConfigurationProgress<T>;
-impl<T> ConfigurationProgress<T> {
-    const fn is_set(&self) -> bool {
-        matches!(*self, CP::AllSet(_))
-    }
-    pub fn is_set_and(self, f: impl FnOnce(T) -> bool) -> bool {
-        match self {
-            CP::NotSet(x) => f(x),
-            CP::AllSet(x) => f(x),
-        }
-    }
-    pub const fn as_ref(&self) -> CP<&T> {
-        match *self {
-            CP::AllSet(ref x) => CP::AllSet(x),
-            CP::NotSet(ref x) => CP::NotSet(x),
-        }
-    }
-    pub const fn as_mut(&mut self) -> CP<&T> {
-        match *self {
-            CP::AllSet(ref mut x) => CP::AllSet(x),
-            CP::NotSet(ref mut x) => CP::NotSet(x),
-        }
-    }
-    pub const fn as_pin_ref(self: Pin<&Self>) -> CP<Pin<&T>> {
-        match Pin::get_ref(self).as_ref() {
-            CP::AllSet(x) => unsafe { CP::AllSet(Pin::new_unchecked(x)) },
-            CP::NotSet(x) => unsafe { CP::NotSet(Pin::new_unchecked(x)) },
-        }
-    }
-    pub const fn as_pin_mut(self: Pin<&mut Self>) -> CP<Pin<&mut T>> {
-        unsafe {
-            match Pin::get_unchecked_mut(self) {
-                CP::AllSet(x) => CP::AllSet(Pin::new_unchecked(x)),
-                CP::NotSet(x) => CP::NotSet(Pin::new_unchecked(x)),
-            }
-        }
-    }
-}
+//mod crafting;
 
-impl<T> std::fmt::Display for ConfigurationProgress<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            CP::AllSet(T) => Ok(print!("{:?}", T)),
-            CP::NotSet(T) => Ok(print!("{:?}", T)),
-        }
-    }
-}
+// fn build_node(self) -> Result<Runtime, ()> {
+//     Builder::new_current_thread()
+//         .thread_name(self.name)
+//         .on_thread_start(|| ()) // TODO!
+//         .on_thread_stop(|| ()) // TODO!
+//         .on_thread_park(|| ()) // TODO!
+//         .on_thread_unpark(|| ()) // TODO!
+//         .enable_time()
+//         .enable_io()
+//         .start_paused(true)
+//         .build()
+//         .map_err(|_| ()) // TODO!
+//         .map(|rt| rt) // TODO!
+// }
 
-#[derive(Debug)]
-pub struct Node {
-    name: CP<String>,
-    id: usize,
-    node_type: NodeType,
-    scope: String,
-}
-
-impl Node {
-    fn build(self) -> Result<Runtime, ()> {
-        Builder::new_current_thread()
-            .thread_name(self.name)
-            .on_thread_start(|| ()) // TODO!
-            .on_thread_stop(|| ()) // TODO!
-            .on_thread_park(|| ()) // TODO!
-            .on_thread_unpark(|| ()) // TODO!
-            .enable_time()
-            .enable_io()
-            .start_paused(true)
-            .build()
-            .map_err(|_| ()) // TODO!
-            .map(|rt| rt) // TODO!
-    }
-    fn get_handle(self) -> RtHandle {
-        unimplemented!()
-        // match self {
-        // RT::Compendium => ,
-        // RT::Space => ,
-        // RT::Ascension => ,
-        // RT::Matrices => ,
-        // };
-    }
-}
-
-#[derive(Debug)]
-enum NodeType {
-    RunTime,
-    Task,
-}
-
-trait NT_RunTime
-where
-    Self: Sized,
-{
-    fn mode(self) -> NodeType {
-        NodeType::RunTime
-    }
-}
-trait NT_Task
-where
-    Self: Sized,
-{
-    fn mode() -> NodeType {
-        NodeType::Task
-    }
-}
-
-#[derive(Debug)]
-enum State {
-    Init,
-    Run,
-    Diag,
-    Stop,
-    End,
-}
-
-//  Sync and Messaging /////////////////////////////////////////////
-
-//    >---> Tokio  MPMC
-//    >---> Watch  SPMC
-
-#[derive(Debug)]
-pub struct Matrisync<T> {
-    id: usize,
-    node: Node,
-    state: State,
-    idle: bool,
-    j_handle: Option<JoinHandle<T>>,
+pub struct Matrisync<S, T> {
+    id: Node<S, T>,
+    state: Param<NC::State>,
+    idle: Param<bool>,
+    j_handle: Option<JoinHandle<Node<(), T>>>,
     a_handle: Option<AbortHandle>,
     t_handle: Option<RtHandle>,
+    edges: Param<HashMap<DC::NodeInfo, DC::EdgeInfo>>,
+    _attr: PhantomData<Node<(), T>>,
 }
 
-#[derive(Debug)]
-enum Msg {
-    Push,
-    Pull,
-    Poll,
+impl<S, T> Matrisync<S, T> {
+    fn new() -> Matrisync<S, T> {
+        Matrisync {
+            id: Node(OnceCell::new(), PhantomData),
+            state: Param::NotSet(NC::State::Setup),
+            idle: Param::NotSet(false),
+            j_handle: None,
+            a_handle: None,
+            t_handle: None,
+            edges: Param::NotSet(HashMap::new()),
+            _attr: PhantomData,
+        }
+    }
+
+    fn sync(&mut self, other: Matrisync<(), T>) {
+        if self.id.0 != other.id.0 {
+            return;
+        }
+        self.state = other.state;
+        self.idle = other.idle;
+        self.j_handle = other.j_handle;
+        self.a_handle = other.a_handle;
+        self.t_handle = other.t_handle;
+    }
 }
 
 //////////////////////////////////////////////////
 // Go time!
 /////////////////
-mod Engine {
+pub(crate) mod Engine {
     use super::*;
-
-    pub fn start<T>() -> Matrices<T> {
-        let mut nodes = HashMap::new();
-        let mut funcs = HashMap::new();
-        Matrices { nodes, funcs }
+    pub fn start() -> () {
+        ()
     }
-
-    pub fn get_ready() -> () {
-        loop {}
-    }
-
+    pub fn get_ready() -> () {}
     pub fn get_set() -> () {
         ()
     }
-
     macro_rules! GO {
         () => {};
     }
