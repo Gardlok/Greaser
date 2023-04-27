@@ -131,6 +131,19 @@ pub mod DataCraft {
 
     /////////////////////////////////////////////////////////////
     // Specific Attributes Info
+    use std::any::{Any, TypeId};
+    use std::collections::HashSet;
+
+    type Attr = HashSet<Any>;
+    trait Attribute {
+        fn add<T: Any + 'static>(&mut self, t: T) {
+            self.0.insert(TypeId::of::<T>(), Box::new(t));
+        }
+    }
+    struct Attributes {
+        node: unimplemented!(),
+    }
+
     #[derive(PartialEq, Eq, Hash)]
     pub enum NodeInfo {
         Noid(u8), // Node ID
@@ -152,83 +165,33 @@ pub mod DataCraft {
         Foid(u8), // Format ID
         Dtid(u8), // Type ID
     }
-
-    // Data
-
-    // Node
 }
 
 pub mod Craft {
     use super::*;
 
-    pub enum Rudiment {
+    pub enum Element {
         Node,
         Edge,
         Data,
     }
 
-    pub trait Craftable<R> {
-        type Item<T>;
-        type Rudi;
-        fn init<T>(/*Item */) -> Result<Self::Item<R>, ()>;
+    pub trait Craftable<Elem> {
+        type Elem<T>;
+        fn init<T>(/*Item */) -> Result<Self::Item<T>, ()>;
         fn conf<T>(&mut self) -> Self::Item<T>;
         fn lock<T>(&mut self) -> Self::Item<T>;
         fn free<T>(&mut self) -> Self::Item<T>;
     }
 
-    impl<R> Craftable<R> for Node {
-        fn init<T>() -> Result<Self, ()> {}
-        fn conf<T>(self) -> Self {
-            self
-        }
-        fn lock<T>(self) -> Self {
-            self
-        }
-        fn free<T>(self) -> Self {
-            self
-        }
-    }
-    pub trait Tinkerable<R> {
-        type Item<T>;
-        type Rudi;
-        fn def(self, attr: &[A]) -> Result<Self::Item, ()>;
-        fn __def(self, attr: &[A]) -> Result<Self::Item, ()>;
-        fn __flip(self, attr: &[A]) -> Result<Self::Item, ()>;
-        fn __incr(self, attr: &[A]) -> Result<Self::Item, ()>;
-
-    impl<R> Tinkerable<R> for Node {
-        fn def(&mut self, attr: &[A]) -> Result<Self::Item, ()> {self}
-        fn __def(self, attr: &[A]) -> Result<Self::Item, ()> {self}
-        fn __flip(self, attr: &[A]) -> Result<Self::Item, ()> {self}
-        fn __incr(self, attr: &[A]) -> Result<Self::Item, ()> {self}
+    pub trait Tinkerable<Elem> {
+        type Elem: Craftable;
+        fn def<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
+        fn __def<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
+        fn __flip<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
+        fn __incr<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
     }
 
-
-    #[derive(PartialEq, Eq)]
-    pub struct NodeStruct<S, T>(
-        // S: Scope T: Type
-        OnceCell<u32>,
-        PhantomData<(S, T)>,
-    );
-    #[derive(PartialEq, Eq)]
-    struct EdgeStruct<P, S, T>(
-        // P: Pattern S: Scope T: Type //
-        u64,
-        PhantomData<(P, S, T)>,
-    );
-    #[derive(PartialEq, Eq)]
-    struct DataStruct<P, C>(
-        // P: Priority C: Class
-        u16,
-        PhantomData<(P, C)>,
-    );
-
-    pub type Node = NodeStruct<(), ()>;
-    pub type Edge = EdgeStruct<(), (), ()>;
-    pub type Data = DataStruct<(), ()>;
-    fn trythis() {
-        let a = Node::Generate(10);
-    }
     trait IdCraft {
         fn GenNewU32<Node>(id: u32) -> u32 {}
         // fn GenNewU32(id: u32) -> u32 {
@@ -236,19 +199,3 @@ pub mod Craft {
         // }
     }
 }
-
-// pub trait Craftable<R> {
-//     type Item<T>;
-//     type Rudi;
-//     fn init<T>(/*Item */) -> Result<Self::Item<R>, ()>;
-//     fn conf<T>(&mut self) -> Self::Item<T>;
-//     fn lock<T>(&mut self) -> Self::Item<T>;
-//     fn free<T>(&mut self) -> Self::Item<T>;
-// }
-
-// impl<R> Craftable<R> for Node {
-//     fn init<T>() -> Result<Self, ()> {}
-//     fn conf<T>(self) -> Self::Item<R> {}
-//     fn lock<T>(self) -> Self::Item<R> {}
-//     fn free<T>(self) -> Self::Item<R> {}
-// }

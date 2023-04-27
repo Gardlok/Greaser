@@ -36,8 +36,11 @@ use std::pin::Pin;
 
 use thiserror::Error;
 
-mod builder;
 mod crafting;
+mod data;
+mod edge;
+mod node;
+mod parameter;
 mod test;
 use builder::parameter::Param;
 use crafting::{DataCraft as DC, EdgeCraft as LC, NodeCraft as NC};
