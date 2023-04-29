@@ -60,9 +60,9 @@ pub mod EdgeCraft {
     pub type Watch<T> = (Wtx<T>, Wrx<T>);
 
     // Storage for handles
-    pub type Storage<T> = std::collections::HashMap<DataCraft::EdgeInfo, T>;
+    //pub type Storage<T> = std::collections::HashMap<DataCraft::EdgeInfo, T>;
     // Wrapper of Metadata for transfers among and of Nodes
-    pub type Unit<DATA> = (DataCraft::EdgeInfo, DATA);
+    // pub type Unit<DATA> = (DataCraft::EdgeInfo, DATA);
     // Error Handling
     #[derive(thiserror::Error, Debug)]
     pub enum EdgeError<T> {
@@ -130,41 +130,6 @@ pub mod DataCraft {
     }
 
     /////////////////////////////////////////////////////////////
-    // Specific Attributes Info
-    use std::any::{Any, TypeId};
-    use std::collections::HashSet;
-
-    type Attr = HashSet<Any>;
-    trait Attribute {
-        fn add<T: Any + 'static>(&mut self, t: T) {
-            self.0.insert(TypeId::of::<T>(), Box::new(t));
-        }
-    }
-    struct Attributes {
-        node: unimplemented!(),
-    }
-
-    #[derive(PartialEq, Eq, Hash)]
-    pub enum NodeInfo {
-        Noid(u8), // Node ID
-        Quid(u8), // Quick ID
-        Ntid(u8), // Type ID
-        Stid(u8), // State ID
-    }
-    #[derive(PartialEq, Eq, Hash)]
-    pub enum EdgeInfo {
-        Liid(u8), // Edge ID
-        Scid(u8), // Scope ID
-        Paid(u8), // Pattern ID
-        Ltid(u8), // Type ID
-    }
-    #[derive(PartialEq, Eq, Hash)]
-    pub enum DataInfo {
-        Daid(u8), // Data ID
-        Scid(u8), // Scope ID
-        Foid(u8), // Format ID
-        Dtid(u8), // Type ID
-    }
 }
 
 pub mod Craft {
@@ -176,26 +141,63 @@ pub mod Craft {
         Data,
     }
 
-    pub trait Craftable<Elem> {
-        type Elem<T>;
-        fn init<T>(/*Item */) -> Result<Self::Item<T>, ()>;
-        fn conf<T>(&mut self) -> Self::Item<T>;
-        fn lock<T>(&mut self) -> Self::Item<T>;
-        fn free<T>(&mut self) -> Self::Item<T>;
+    pub trait Craftable
+    where
+        Self: Sized,
+    {
+        fn init<T>(/*Item */) -> Result<Self, ()>;
+        // fn conf<T>(&mut self) -> Self;
+        // fn lock<T>(&mut self) -> Self;
+        // fn free<T>(&mut self) -> Self;
     }
 
-    pub trait Tinkerable<Elem> {
-        type Elem: Craftable;
-        fn def<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
-        fn __def<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
-        fn __flip<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
-        fn __incr<Attr>(self, attr: &[Attr]) -> Result<Self::Item, ()>;
-    }
-
-    trait IdCraft {
-        fn GenNewU32<Node>(id: u32) -> u32 {}
-        // fn GenNewU32(id: u32) -> u32 {
-        //     Nodef(OnceCell::new_with(id), PhantomData)
-        // }
+    pub trait Tinkerable<Elem>
+    where
+        Self: Sized,
+    {
+        type Elem<Attr>;
+        fn def<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
+        fn __def<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
+        fn __flip<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
+        fn __incr<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
     }
 }
+
+//mod crafting;
+
+// fn build_node(self) -> Result<Runtime, ()> {
+//     Builder::new_current_thread()
+//         .thread_name(self.name)
+//         .on_thread_start(|| ()) // TODO!
+//         .on_thread_stop(|| ()) // TODO!
+//         .on_thread_park(|| ()) // TODO!
+//         .on_thread_unpark(|| ()) // TODO!
+//         .enable_time()
+//         .enable_io()
+//         .start_paused(true)
+//         .build()
+//         .map_err(|_| ()) // TODO!
+//         .map(|rt| rt) // TODO!
+// }
+
+// #[derive(PartialEq, Eq, Hash)]
+// pub enum NodeInfo {
+//     Noid(u8), // Node ID
+//     Quid(u8), // Quick ID
+//     Ntid(u8), // Type ID
+//     Stid(u8), // State ID
+// }
+// #[derive(PartialEq, Eq, Hash)]
+// pub enum EdgeInfo {
+//     Liid(u8), // Edge ID
+//     Scid(u8), // Scope ID
+//     Paid(u8), // Pattern ID
+//     Ltid(u8), // Type ID
+// }
+// #[derive(PartialEq, Eq, Hash)]
+// pub enum DataInfo {
+//     Daid(u8), // Data ID
+//     Scid(u8), // Scope ID
+//     Foid(u8), // Format ID
+//     Dtid(u8), // Type ID
+// }

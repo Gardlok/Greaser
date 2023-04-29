@@ -22,41 +22,43 @@ use tokio::time::{Duration, Instant};
 use futures::{
     stream::FuturesOrdered as ord_futs,     //
     stream::FuturesUnordered as unord_futs, //
-    task::FutureObj,                        //
     Future,                                 //
     FutureExt,                              //
     StreamExt,                              //
 };
-use std::borrow::BorrowMut;
 //
 use std::collections::HashMap;
-use std::iter::OnceWith;
-use std::marker::PhantomData;
 use std::pin::Pin;
 
 use thiserror::Error;
 
-mod crafting;
+mod attri;
+mod craft;
 mod data;
 mod edge;
+mod index;
 mod node;
-mod parameter;
+mod param;
 mod test;
-use builder::parameter::Param;
-use crafting::{DataCraft as DC, EdgeCraft as LC, NodeCraft as NC};
+use attri::*;
+use craft::{DataCraft as DC, EdgeCraft as LC, NodeCraft as NC};
+use data::*;
+use edge::*;
+use index::*;
+use node::*;
+use param::*;
 /////////////////////////////////////////////
 // Types
 
-type Func<T> = Pin<Box<dyn Future<Output = Result<Node, ()>>>>;
-type Sharedcast = (BroadCastTx<()>, BroadCastRx<()>);
-impl trythat for Node {}
+pub type Func<T> = Pin<Box<dyn Future<Output = Result<Node, T>>>>;
+pub type Sharedcast = (BroadCastTx<()>, BroadCastRx<()>);
 /////////////////////////////////////////////
 // Primary logic and work flow
 pub struct Matrices {
     // Map of Node ID to a copy of individual node Matrisync
     // objects. Any node operating in any scope must have a
     // copy of their matrisync in this map
-    msyncs: HashMap<Node<(), ()>, Vec<Matrisync<(), ()>>>,
+    msyncs: HashMap<Node, Vec<Matrisync>>,
     // Store the runtimes and tasks in their async function form
     //mfuncs: [Func],
     //
@@ -86,54 +88,31 @@ impl Matrices {
     // }
 }
 
-//mod crafting;
+pub struct Matricet;
 
-// fn build_node(self) -> Result<Runtime, ()> {
-//     Builder::new_current_thread()
-//         .thread_name(self.name)
-//         .on_thread_start(|| ()) // TODO!
-//         .on_thread_stop(|| ()) // TODO!
-//         .on_thread_park(|| ()) // TODO!
-//         .on_thread_unpark(|| ()) // TODO!
-//         .enable_time()
-//         .enable_io()
-//         .start_paused(true)
-//         .build()
-//         .map_err(|_| ()) // TODO!
-//         .map(|rt| rt) // TODO!
-// }
-
-pub struct Matrisync<S, T> {
-    id: Node<S, T>,
-    state: Param<NC::State>,
-    idle: Param<bool>,
-    j_handle: Option<JoinHandle<Node<(), T>>>,
+pub struct Matrisync {
+    pub id: Node,
+    j_handle: Option<JoinHandle<Node>>,
     a_handle: Option<AbortHandle>,
     t_handle: Option<RtHandle>,
-    edges: Param<HashMap<DC::NodeInfo, DC::EdgeInfo>>,
-    _attr: PhantomData<Node<(), T>>,
+    matricet: Matricet,
 }
 
-impl<S, T> Matrisync<S, T> {
-    fn new() -> Matrisync<S, T> {
+impl Matrisync {
+    pub async fn new() -> Matrisync {
         Matrisync {
-            id: Node(OnceCell::new(), PhantomData),
-            state: Param::NotSet(NC::State::Setup),
-            idle: Param::NotSet(false),
+            id: Node::new(),
             j_handle: None,
             a_handle: None,
             t_handle: None,
-            edges: Param::NotSet(HashMap::new()),
-            _attr: PhantomData,
+            matricet: Matricet,
         }
     }
 
-    fn sync(&mut self, other: Matrisync<(), T>) {
+    pub fn sync(&mut self, other: Matrisync) {
         if self.id.0 != other.id.0 {
             return;
         }
-        self.state = other.state;
-        self.idle = other.idle;
         self.j_handle = other.j_handle;
         self.a_handle = other.a_handle;
         self.t_handle = other.t_handle;

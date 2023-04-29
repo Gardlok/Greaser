@@ -1,5 +1,4 @@
 use std::pin::Pin;
-use tokio::pin;
 
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 pub(crate) enum Parameter<T> {
