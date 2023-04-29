@@ -1,11 +1,11 @@
 use std::pin::Pin;
 
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
-pub(crate) enum Parameter<T> {
+pub enum Parameter<T> {
     NotSet(T),
     AllSet(T),
 }
-pub(crate) type Param<T> = Parameter<T>;
+pub type Param<T> = Parameter<T>;
 impl<T> Parameter<T> {
     const fn is_set(&self) -> bool {
         matches!(*self, Param::AllSet(_))

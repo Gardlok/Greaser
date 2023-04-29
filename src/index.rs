@@ -10,6 +10,11 @@ pub struct TypeTally {
     data: HashMap<TypeId, usize>,
 }
 impl TypeTally {
+    pub fn new() -> TypeTally {
+        TypeTally {
+            data: HashMap::new(),
+        }
+    }
     pub fn next<T: Any + 'static>(&mut self) -> usize {
         let t = TypeId::of::<T>();
         let t2 = self.data.entry(t).or_insert_with_key(|k| 0);

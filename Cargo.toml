@@ -9,6 +9,7 @@ edition = "2021"
 frunk = "0.4.1"
 futures = "0.3.28"
 futures-util = "0.3.28"
+hashbrown = "0.13.2"
 thiserror = "1.0.40"
 tokio = { version = "1.27.0", features = ["rt", "sync", "time", "rt-multi-thread", "stats", "tracing", "io-std", "io-util", "process", "test-util"] }
 tokio-stream = { version = "0.1.12", features = ["sync"] }
