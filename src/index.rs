@@ -17,7 +17,11 @@ impl TypeTally {
     }
     pub fn next<T: Any + 'static>(&mut self) -> usize {
         let t = TypeId::of::<T>();
-        let t2 = self.data.entry(t).or_insert_with_key(|k| 0);
+        let t2 = self
+            .data
+            .entry(t)
+            .and_modify(|x| *x += 1)
+            .or_insert_with_key(|k| 0);
         t2.to_owned()
     }
     pub fn reset<T: Any + 'static>(&mut self) {
