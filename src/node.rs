@@ -3,21 +3,33 @@ use crate::craft::{Craftable, NodeCraft::*};
 // node will use Edges and Data to achieve it's goal. A Node is a representation
 // of any Task, Runtime, Event processing within the Matrices.
 
+use std::any::{Any, TypeId};
 use std::cmp::{Eq, PartialEq};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use tokio::sync::OnceCell;
 
 ///////////////////////////////////////////////////////////////
+
 impl Node {
     pub fn new() -> Node {
         let id: OnceCell<u8> = OnceCell::new();
         NodeStruct::<(), (), (), ()>(id, PhantomData) as Node
+        // NodeStruct::<(), (), (), ()>(id, PhantomData) as Node
     }
     pub fn from(i: u8) -> Node {
         let id: OnceCell<u8> = OnceCell::new_with(Some(i));
         NodeStruct::<(), (), (), ()>(id, PhantomData) as Node
     }
+    pub fn ret(self) -> u8 {
+        match self::
+    }
+}
+pub enum NodeInfo {
+    Noid(u8), // Node ID
+    Quid(u8), // Quick ID
+    Ntid(u8), // Type ID
+    Stid(u8), // State ID
 }
 
 impl Hash for Node {

@@ -24,7 +24,6 @@ mod edge; // Edge portion of D.E.N's logistics model set
 mod index; // Measuring, observations, and Smart pointers
 mod node; // Node portion of D.E.N's logistics model set
 mod param; // Like Option, but returns an ITEM either way
-mod thashmap;
 use attri::*;
 use craft::*;
 use data::*;
@@ -32,7 +31,6 @@ use edge::*;
 use index::*;
 use node::*;
 use param::*;
-use thashmap::*;
 //
 //
 #[cfg(test)]
@@ -45,13 +43,18 @@ pub struct Matrices {
     // Map of Node ID to a copy of individual node Matrisync
     // objects. Any node operating in any scope must have a
     // copy of their matrisync in this map
-    sigmas: HashMap<u8, Sigma>,
+    sigma: HashMap<Node, Sigma>,
     // Store the runtimes and tasks in their async function form
     //mfuncs: [Func],
     //
     // Temp experiment /////////////////////////////////////////
     // msyncs: Pin<Box<HashMap<Nid, Vec<Matrisync<NodeType>>>>>,
-    mfuncs: Pin<Box<[FutFunc<()>]>>, //
+    mfunc: Pin<Box<[FutFunc<()>]>>, //
+    ////////////////////////////////////////////////////////////
+    // Store the runtime and tasks in their handle form to be
+    // managed after their instance has been created
+    rhand: HashMap<Node, Runtime>,
+    thand: HashMap<Node, JoinHandle<()>>,
     ////////////////////////////////////////////////////////////
     // Create/store a MPMC channel to be distrobuted among the
     // nodes. For systematic purpose, this will be the _shared_
@@ -59,17 +62,23 @@ pub struct Matrices {
     // deticated root channel.
     matrisync: Matrisync<()>,
     ////////////////////////////////////////////////////////////
+    //
     // Multi Tally Tool using types as the index.
-    // TODO:  Implement more metrics
-    indexer: TypeTally,
+    type_indexer: TypeTally,
 }
 
 impl Matrices {
-    pub fn add(&mut self, sigma: Sigma) -> Result<(), ()> {
+    pub async fn add(&mut self, rtid: Option<u8>, futfunc: FutFunc<()>) -> Result<(), ()> {
         // If Matrices already has existing Node under this
         // handle we <<  [X]"will"  [ ]"will not"  >> overwrite it
+        // Pending further review...subject to change
+
+        
+        
+        let mut sigma = Sigma::new().await;
+        sigma.node = () 
         let x = self
-            .sigmas
+            .sigma
             .entry(sigma.node.0.get().unwrap().to_owned())
             .or_insert(sigma);
 
@@ -85,14 +94,12 @@ impl Matrices {
 #[derive(Debug, Clone)]
 pub struct Sigma {
     node: Node,
-    handle: (), //Handles<()>,
     matrisync: Matrisync<()>,
 }
 impl Sigma {
     pub async fn new() -> Sigma {
         Sigma {
             node: Node::new(),
-            handle: (), //                   <TODO:
             matrisync: Matrisync::init(),
         }
     }

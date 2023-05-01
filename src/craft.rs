@@ -81,11 +81,6 @@ pub mod EdgeCraft {
 
     #[derive(Debug)]
     pub struct Matrisync<T>(pub BCtx<T>, pub BCrx<T>);
-    pub struct Handles<T>(
-        pub Param<Handle>,
-        pub Option<JoinHandle<T>>,
-        pub Param<AbortHandle>,
-    );
 
     // Error Handling for Edges
     #[derive(thiserror::Error, Debug)]
