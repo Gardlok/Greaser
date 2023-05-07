@@ -1,5 +1,6 @@
 #![feature(maybe_uninit_ref)]
 #![feature(associated_type_bounds)]
+#![feature(trivial_bounds)]
 use futures::Future;
 #[allow(
     missing_docs,
@@ -11,6 +12,7 @@ use futures::Future;
 //
 use tokio::runtime::{Builder, Handle as RtHandle, Runtime};
 use tokio::time::{Duration, Instant};
+
 //
 use hashbrown::HashMap;
 use std::pin::Pin;
@@ -40,49 +42,74 @@ mod test;
 /////////////////////////////////////////////
 // Primary logic and work flow
 pub struct Matrices {
-    // Map of Node ID to a copy of individual node Matrisync
+    // Map of Node ID to a copy of individual node MatriSet
     // objects. Any node operating in any scope must have a
     // copy of their matrisync in this map
-    sigma: HashMap<Node, Sigma>,
+    sigma: HashMap<Noid, Sigma>,
     // Store the runtimes and tasks in their async function form
     //mfuncs: [Func],
     //
     // Temp experiment /////////////////////////////////////////
-    // msyncs: Pin<Box<HashMap<Nid, Vec<Matrisync<NodeType>>>>>,
-    mfunc: Pin<Box<[FutFunc<()>]>>, //
+    mfunc: HashMap<Noid, Pin<Box<[FutFunc<()>]>>>,
+    // mfunc: Pin<Box<[FutFunc<()>]>>, //
     ////////////////////////////////////////////////////////////
     // Store the runtime and tasks in their handle form to be
     // managed after their instance has been created
-    rhand: HashMap<Node, Runtime>,
-    thand: HashMap<Node, JoinHandle<()>>,
+    rhand: HashMap<Noid, Runtime>,
+    thand: HashMap<Noid, JoinHandle<()>>,
     ////////////////////////////////////////////////////////////
     // Create/store a MPMC channel to be distrobuted among the
     // nodes. For systematic purpose, this will be the _shared_
     // copy while a seperate copy will be used for the Matrices
     // deticated root channel.
-    matrisync: Matrisync<()>,
+    matri: MatriSet<()>,
     ////////////////////////////////////////////////////////////
     //
     // Multi Tally Tool using types as the index.
-    type_indexer: TypeTally,
+    // type_indexer: TypeTally,
+    ////////////////////////////////////////////////////////////
+    //
+    // Nested index to manage Node indices
+    noded: Nestindex::Nestindex,
 }
 
 impl Matrices {
-    pub async fn add(&mut self, rtid: Option<u8>, futfunc: FutFunc<()>) -> Result<(), ()> {
+    pub async fn new() -> Matrices {
+        Matrices {
+            sigma: HashMap::new(),
+            mfunc: HashMap::new(),
+            rhand: HashMap::new(),
+            thand: HashMap::new(),
+            matri: MatriSet::new().await,
+            noded: Nestindex::Nestindex::new(),
+        }
+    }
+    pub async fn add(&mut self, rtid: Option<u8>, futfunc: FutFunc<()>) -> Result<Sigma, ()> {
         // If Matrices already has existing Node under this
         // handle we <<  [X]"will"  [ ]"will not"  >> overwrite it
         // Pending further review...subject to change
 
-        
-        
+        // TODO: Rethink/rebuild this code block
         let mut sigma = Sigma::new().await;
-        sigma.node = () 
+        if rtid.is_some() {
+            let (rtid, noid) = self.noded.next_in(rtid.unwrap());
+            sigma.node = Noid::from(rtid, noid);
+        } else {
+            let (rtid, noid) = self.noded.next();
+            sigma.node = Noid::from(rtid, noid);
+        }
+        //
+        sigma.matrisync = self.matrisync.clone();
+        //
         let x = self
             .sigma
-            .entry(sigma.node.0.get().unwrap().to_owned())
-            .or_insert(sigma);
+            .entry(sigma.node.clone())
+            .or_insert(sigma.clone());
+        //
+        self.mfunc.insert(sigma.node, Pin::new(Box::new([futfunc])));
 
-        Ok(())
+        //
+        Ok(x.to_owned())
     }
 }
 
@@ -93,14 +120,18 @@ impl Matrices {
 //
 #[derive(Debug, Clone)]
 pub struct Sigma {
-    node: Node,
-    matrisync: Matrisync<()>,
+    id: Noid,
+    matridex: RwLock<HashSet<Noid>>,
+    matriset: (BCtx<BCtype>, BCrx<BCtype>),
+    edgeset: EdgeSet,
+    // HashMap of IO ??
 }
 impl Sigma {
     pub async fn new() -> Sigma {
         Sigma {
-            node: Node::new(),
-            matrisync: Matrisync::init(),
+            id: Noid::new(),
+            matrisync: MatriSet::new().await,
+            edgeset: EdgeSet::new(),
         }
     }
 }

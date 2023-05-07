@@ -1,45 +1,52 @@
 // Async Global Multi Indexer
 // Ex of needs
 // fn adduser() { let (user_id, workspace_id) = Indexer.get_next_for(user, workspace)}
-// Basic (non async) Multi Indexer keyed by type
 
-pub mod NodeTally {
+pub mod Nestindex {
     use super::SerialInt::*;
     use hashbrown::HashMap;
 
-    pub struct Tally {
+    // Indexing with two layers, a parent layer and a child layer.
+    pub struct Nestindex {
         data: HashMap<u8, SerialGenerator>,
         tally: SerialGenerator<u8>,
     }
-    impl Tally {
-        pub fn new() -> Tally {
-            Tally {
+    impl Nestindex {
+        pub fn new() -> Nestindex {
+            Nestindex {
                 data: HashMap::new(),
                 tally: SerialGenerator::<u8>::new(),
             }
         }
-        pub fn next(&mut self, rtid: Option<usize>) -> u8 {
-            // If a RT id is not provided, create one equal to the next value in RT index. If
+        // Retrieves the next available parent id
+        pub fn next(&mut self) -> (u8, u8) {
+            let index = self.tally.generate();
+            self.data.insert(index, SerialGenerator::new());
+            self.next_in(index)
+        }
+        pub fn next_in(&mut self, parentid: u8) -> (u8, u8) {
+            // If a parent id is not provided, create one equal to the next value in parent index. If
             // the index was empty, be the first entry
-            if rtid.is_some() {
-                self.data.entry(rtid.unwrap()).and_modify(|v| v.generate())
+            let gen = self.data.get_mut(&parentid);
+            if gen.is_some() {
+                (parentid, gen.unwrap().generate())
             } else {
-                self.data
-                    .values_mut()
-                    .for_each(|&mut v| v = SerialGenerator::<u8>::new())
+                let mut gen = SerialGenerator::<u8>::new();
+                let childid = gen.generate();
+                self.data.insert(parentid, gen);
+                (parentid, childid)
             }
         }
-        pub fn reset(&mut self, rtid: Option<u8>) {
-            // If a RT id is not provided, reset all the indices for each RT id, however
-            // each RT will retain it's id.
-            if rtid.is_some() {
+        pub fn reset(&mut self, parentid: Option<u8>) {
+            // If a parent id is not provided, reset all the indices for each parent id, however
+            // each parent will retain it's id. If one is provided, only that parent id will
+            // reset it's child id's.
+            if parentid.is_some() {
                 self.data
-                    .entry(rtid.unwrap())
+                    .entry(parentid.unwrap())
                     .and_replace_entry_with(|_, v| Some(SerialGenerator::<u8>::new()));
             } else {
-                self.data
-                    .values_mut()
-                    .for_each(|&mut v| v = SerialGenerator::<u8>::new())
+                self.data.values_mut().map(|_| SerialGenerator::<u8>::new());
             }
         }
         pub fn resetall(&mut self) {
@@ -48,6 +55,7 @@ pub mod NodeTally {
     }
 }
 
+// Basic (non async) Multi Indexer keyed by type
 pub mod TypeTally {
     use std::any::{Any, TypeId};
     use std::collections::HashMap;
@@ -79,99 +87,23 @@ pub mod TypeTally {
             self.data.clear()
         }
     }
-}
-// Testing:
-// let mut testmap = crate::TypeTally::new();
-// let first: String = "Hello".to_string();
-// let second: i8 = 5;
-// let third: bool = true;
-// assert_eq!(testmap.next::<newb<_>>(), 0);
-// assert_eq!(testmap.next::<newb<_>>(), 1);
-// assert_eq!(testmap.next::<newb<_>>(), 2);
-// assert_eq!(testmap.next::<pro<_>>(), 0);
-// assert_eq!(testmap.next::<pro<_>>(), 1);
-// assert_eq!(testmap.next::<newb<_>>(), 3);
+    mod tests {
+        use crate::TypeTally::Tally;
 
-/////////////////////////////////////////////////////////////////////
-// HashMap allow any type as keys
-mod AnyMap {
-    use std::any::{Any, TypeId};
-    use std::hash::{Hash, Hasher};
-
-    pub trait DynEq: Any {
-        fn dyn_eq(&self, other: &dyn DynEq) -> bool;
-
-        fn as_any(&self) -> &dyn Any;
-    }
-    pub trait DynHash: DynEq {
-        fn dyn_hash(&self, hasher: &mut dyn Hasher);
-        fn as_dyn_eq(&self) -> &dyn DynEq;
-    }
-    impl<H: Eq + Any> DynEq for H {
-        fn dyn_eq(&self, other: &dyn DynEq) -> bool {
-            if let Some(other) = other.as_any().downcast_ref::<H>() {
-                self == other
-            } else {
-                false
-            }
-        }
-        fn as_any(&self) -> &dyn Any {
-            self
+        #[test]
+        fn typetally() {
+            let mut testmap = Tally::new();
+            let first: String = "Hello".to_string();
+            let second: i8 = 5;
+            let third: bool = true;
+            assert_eq!(testmap.next::<u8>(), 0);
+            assert_eq!(testmap.next::<u8>(), 1);
+            assert_eq!(testmap.next::<u8>(), 2);
+            assert_eq!(testmap.next::<u16>(), 0);
+            assert_eq!(testmap.next::<u16>(), 1);
+            assert_eq!(testmap.next::<u8>(), 3);
         }
     }
-    impl<H: Hash + DynEq> DynHash for H {
-        fn dyn_hash(&self, mut hasher: &mut dyn Hasher) {
-            H::hash(self, &mut hasher)
-        }
-        fn as_dyn_eq(&self) -> &dyn DynEq {
-            self
-        }
-    }
-    impl PartialEq for dyn DynHash {
-        fn eq(&self, other: &dyn DynHash) -> bool {
-            self.dyn_eq(other.as_dyn_eq())
-        }
-    }
-    impl Eq for dyn DynHash {}
-    impl Hash for dyn DynHash {
-        fn hash<H: Hasher>(&self, hasher: &mut H) {
-            self.dyn_hash(hasher)
-        }
-    }
-    ////////////
-    //
-    // Keys can be any type while values have share the same type
-    struct DTKHashMap<T>(hashbrown::HashMap<Box<dyn DynHash>, T>);
-
-    //let mut map = HashMap::<Box<dyn DynHash>, _>::new();
-    // type newb: DynHash = ();
-    // type pro<T> = T;
-
-    // fn new<T: DynHash>(value: T) -> Box<dyn DynHash> {
-    //     Box::new(value)
-    // }
-
-    // assert!(false);
-    // assert!(new(1u8) != new(2u8));
-    // assert!(new(1u8) != new(1i8));
-    // assert!(new(1u8) != new("hello"));
-    // map.insert(new(-1i32), "-1i32");
-    // map.insert(new("hello"), "the string \"hello\"");
-    // map.insert(new(4u128), "4u128");
-    // map.insert(new(49u128), "4u128");
-    // map.insert(new(()), "()");
-    // enum TTT {
-    //     First(u8),
-    //     Second,
-    // }
-    // struct SSS {};
-    // let s = SSS {};
-    // assert_eq!(map.get(&6u128 as &dyn DynHash), Some(&"4u128"));
-    // assert_eq!(map.get(&5u128 as &dyn DynHash), Some(&"4u128"));
-    // assert_eq!(
-    //     map.remove(&"hello" as &dyn DynHash),
-    //     Some("the string \"hello\"")
-    // );
 }
 
 mod SerialInt {
@@ -269,6 +201,114 @@ mod SerialInt {
                 let next_value = self.generate();
                 Some(next_value)
             }
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+pub mod CraftingTable {
+    use crate::craft::{DataCraft::*, EdgeCraft::*, NodeCraft::*};
+
+    use super::*;
+    use hashbrown::HashMap;
+
+    pub struct Table {
+        //root// Runtimes   //Tasks       // Components
+        root: HashMap<Noid, HashMap<Noid, Vec<EdgeType>>>,
+        scopes: HashMap<Scope, Vec<Noid>>,
+    }
+
+    // Real time information on the build
+    pub struct Stats {
+        runtimes: usize,
+        tasks: usize,
+        edges: usize,
+        scopes: usize,
+    }
+
+    impl Table {
+        //////////////////////////////////////////////
+        // Inputs
+        /////////
+        // Create a new Table with at least one Runtime/Task instance. In
+        // any use case there should be at least one of these. However, this
+        // is not limited to just working with one. Multiple Nodes, Edges, and
+        // Scopes should be configurable simultaneously.
+        pub fn new(noids: Vec<Noid>) -> Table {
+            let mut root = HashMap::new();
+            let mut scopes = HashMap::new();
+            for noid in noids {
+                root.entry(noid.0).or_insert(HashMap::new());
+                scopes.entry(noid).or_insert(vec![noid]);
+            }
+            Table { root, scopes }
+        }
+        // Add a new runtime to the roster, this also addes the additional
+        // node entry plus scope entry respectively.
+        pub fn add_rts(self, noids: Vec<Noid>) -> Table {
+            for noid in noids {
+                self.root.insert(noid.0, HashMap::new());
+                self.scopes.entry(noid).or_insert(vec![noid]);
+            }
+        }
+        // Add new tasks to the roster
+        pub fn add_tasks(self, noids: Vec<Noid>) -> Table {
+            for noid in noids {
+                self.root
+                    .entry(noid.0)
+                    .and_modify(|rt| rt.entry(noid.1).or_insert(Vec::new()));
+                self.scopes.entry(noid).or_insert(vec![noid]);
+            }
+        }
+        // Add Edge components to the node configuration
+        pub fn add_edges(self, noids: Vec<Noid>, edges: Vec<EdgeType>) -> Table {
+            for noid in noids {
+                self.root
+                    .entry(noid.0)
+                    .and_modify(|rt| rt.entry(noid.1).or_insert(edges))
+            }
+        }
+        // Add Scope designation to the nod configuration
+        pub fn add_scopes(self, scope: Noid, noids: Vec<Noid>) -> Table {
+            for noid in noids {
+                self.scopes.entry(scope).and_modify(|scope| {
+                    scope
+                        .entry(noid)
+                        .and_modify(|group| group.append(noid))
+                        .or_insert()
+                })
+            }
+        }
+        //
+        //////////////////////////////////////////////
+        // Outputs
+        //////////
+        pub fn stats(self) -> Stats {
+            let mut count_r = 0usize; // Runtime count
+            let mut count_t = 0usize; // Task count
+            let mut count_e = 0usize; // Edge count
+            let mut count_s = 0usize; // Scope count
+            self.root.drain().inspect(|(rt, noids)| {
+                count_r += 1;
+                count_t += noids.len();
+                noids.drain().inspect(|_, edges| count_e += edges.len());
+            });
+            count_s += self.scopes.len();
+            Stats {
+                runtimes: count_r,
+                tasks: count_t,
+                edges: count_e,
+                scopes: count_s,
+            }
+        }
+        pub fn runtimes(self) -> Vec<u8> {
+            self.root.keys().collect()
+        }
+        pub fn nodes(self) -> Vec<Noid> {
+            self.root.values().into_iter().sort().dedup()
+        }
+        pub fn scopes(self) -> Vec<Scope> {
+            self.scopes.keys().collect()
         }
     }
 }

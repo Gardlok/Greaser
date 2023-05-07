@@ -1,37 +1,32 @@
 use std::any::TypeId;
 use tokio::runtime::Handle;
 
-use crate::craft::*;
+use crate::craft::EdgeCraft::*;
 
-// Matrisync connection utility - Broadcast MPMC channel
-impl<T> Craftable for Matrisync<T>
-// Matrisync<T> (    //
-//     pub BCtx<T>,  // Broadcast Transmitter
-//     pub BCrx<T>,  // Broadcast Reciever
-// )   // The type passed in generically is what is sent
-//     // over the channels. It must be Clone ready
-where
-    T: Clone,
-{
-    fn init() -> Matrisync<T> {
-        let (tx, rx) = b_chan(32);
-        Matrisync(tx, rx)
-    }
-    fn conf<A>(&mut self) -> Self {
-        unimplemented!()
-    }
-    fn lock<A>(&mut self) -> Self {
-        unimplemented!()
-    }
-    fn free<A>(&mut self) -> Self {
-        unimplemented!()
-    }
-}
 impl<T> Clone for Matrisync<T>
 where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        Matrisync(self.0.clone(), self.0.subscribe())
+        Matrisync(self.0.clone(), self.0.subscribe(), RwLock::from(self.2))
+    }
+}
+
+impl<T> Matrisync<T>
+where
+    T: Clone,
+{
+    //
+    pub async fn new() -> Matrisync<T> {
+        let (tx, rx) = b_chan(32);
+        Matrisync(tx, rx, Matridex::new(hashbrown::HashSet::new()))
+    }
+    //
+    pub async fn send(self, content: T) -> Result<usize, EdgeError<T>> {
+        self.0.send(content).map_err(EdgeError::SendFailBC)
+    }
+    //
+    pub async fn recv(&mut self, content: T) -> Result<T, EdgeError<T>> {
+        self.1.recv().await.map_err(EdgeError::RecvFailBC)
     }
 }

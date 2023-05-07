@@ -2,122 +2,187 @@
 
 // CommonSpace
 use futures::Future;
-use std::marker::PhantomData;
 use std::pin::Pin;
 //
 // Node, Edge, and Data Crafting
-pub use crate::{index::*, param::*};
+// pub use crate::{index::*, param::*};
 pub use {DataCraft::*, EdgeCraft::*, NodeCraft::*};
 pub enum Element {
-    Node,
-    Edge,
-    Data,
+    //////// Relative ID's
+    Node, // Noid -  Node ID
+    Edge, // Egid -  Edge ID
+    Data, // Scid - Scope ID
 }
 /////////////////////////////////////////////////////////////////////////
 
 pub mod DataCraft {
-    use hashbrown::HashMap;
+    pub use hashbrown::{HashMap, HashSet};
+
+    // Parsing data:
+    //   1) Edge Layer (Concerned with Sender, reciever node IDs)
+    //   2) Data Layer (Concerned with Class and Priority of Content)
+    //   3) Exec Layer (Concerned with Ownership, Allocation, Handling)
+    //   4) Rins Layer (Concerned with Reporting, Cleanup, Dropping)
+    // pub trait Data {}
+    /////////////////////////////////////////////////////////////////////
+    //
+    //
+    // pub trait LayeredParsing {}
+    // pub trait EdgeLayer<TX, RX> {}
+    // pub trait DataLayer<C, P> {}
+    // pub trait ExecLayer {}
+    // pub trait RinsLayer {}
+    pub struct EdgeLayer {
+        pub source: TX,
+        pub dest: RX,
+    }
+    pub trait DataLayer<C, P> {}
+    pub trait ExecLayer {}
+    pub trait RinsLayer {}
+
+    pub struct Data {
+        pub edge_layer: EdgeLayer,
+    }
+
+    /////////////////////////////////////////////////////////////////////
+    // Scope Designation
+    //
+    #[derive(PartialEq, Eq, Hash)]
+    pub enum NodeInfo {
+        Noid(u8), // Node ID
+        Rtid(u8), // Runtime ID
+        Ntid(u8), // Type ID
+    }
+    #[derive(PartialEq, Eq, Hash)]
+    pub enum EdgeInfo {
+        Liid(u8), // Edge ID
+        Scid(u8), // Scope ID
+        Ltid(u8), // Type ID
+    }
+    #[derive(PartialEq, Eq, Hash)]
+    pub enum DataInfo {
+        Daid(u8), // Data ID
+        Foid(u8), // Format ID
+        Dtid(u8), // Type ID
+    }
+
+    /////////////////////////////////////////////////////////////////////
+    // Dynamic Dispatching
+    //
     use std::any::{Any, TypeId};
+    use std::hash::{Hash, Hasher};
+
+    pub trait DynEq: Any {
+        fn dyn_eq(&self, other: &dyn DynEq) -> bool;
+        fn as_any(&self) -> &dyn Any;
+    }
+    pub trait DynHash: DynEq {
+        fn dyn_hash(&self, hasher: &mut dyn Hasher);
+        fn as_dyn_eq(&self) -> &dyn DynEq;
+    }
 }
 
 pub mod NodeCraft {
-    use super::*;
-    use std::cmp::{Eq, PartialEq};
-    use std::hash::Hash;
     use tokio::sync::OnceCell;
 
-    pub type Node = NodeStruct<(), (), (), ()>;
-    #[derive(PartialEq, Eq, Clone, Debug)]
-    pub struct NodeStruct<Noid, Quid, Ntid, Stid>(
-        pub OnceCell<u8>,
-        pub PhantomData<(Noid, Quid, Ntid, Stid)>,
-    );
-    pub type FutFunc<T> = Pin<Box<dyn Future<Output = Result<Node, T>>>>;
-    ///
-    #[derive(PartialEq, Eq, Hash, Debug)]
-    pub enum NodeType {
-        Runtime,
-        Task,
-        Shadow,
-    }
+    pub trait Node {}
 
-    #[derive(PartialEq, Eq, Hash, Debug)]
-    pub enum NodeInfo {
-        Noid(u8), // Node ID
-        Quid(u8), // Quick ID
-        Ntid(u8), // Type ID
-        Stid(u8), // State ID
-    }
-    #[derive(PartialEq, Eq, Hash, Debug)]
-    pub enum State {
-        Setup,
-        Init,
-        Run,
-        Diag,
-        Stop,
-        End,
-    }
+    #[derive(Clone, Eq, PartialEq, Debug)]
+    pub struct Noid(pub OnceCell<u8>, pub OnceCell<u8>);
+
+    //
 }
-
+///////////////////////////////////////////////////////////////////////////////
 pub mod EdgeCraft {
-    use super::*;
-
-    use futures::{
-        stream::FuturesOrdered as ord_futs,     //
-        stream::FuturesUnordered as unord_futs, //
-        Future,
-        FutureExt,
-        StreamExt,
-    };
-    use tokio::runtime::Handle;
+    /*
+        Edges are the relationships, connecting points, and behaivors that have
+        some effect or meaning transferred from one node to another. These
+        definitions will structure the shared resources.
+        Primary Types:
+            MatriSet - Base level ops messaging through broadcast and unique addresses. Includes a
+                        Matridex which catalogs nodes connected to the MatriSet channel.
+            EdgeSet - Varying Collection of Edges, these will extend behaivors beyond the MatriSet
+                      capabilities
+    */
+    use crate::DataCraft::{DynEq, DynHash, HashSet};
+    use crate::NodeCraft::Noid;
+    //
     pub use tokio::sync::{
         broadcast::{channel as b_chan, Receiver as BCrx, Sender as BCtx},
         mpsc::{channel as mpsc_chan, Receiver as MPSCrx, Sender as MPSCtx},
         oneshot::{channel as os_chan, Receiver as OSrx, Sender as OStx},
         watch::{channel as w_chan, Receiver as Wrx, Sender as Wtx},
-        Barrier, OnceCell,
+        Barrier, Mutex, OnceCell, RwLock,
     };
-    pub use tokio::task::{AbortHandle, JoinHandle};
+    pub use tokio::{
+        runtime::Handle,
+        task::{AbortHandle, JoinHandle},
+    };
 
-    #[derive(Debug)]
-    pub struct Matrisync<T>(pub BCtx<T>, pub BCrx<T>);
+    pub trait Edge {}
+    //
+    //////////
+    // EdgeSet
+    // Common Edge types are the tools/tasks a node will utilize.
+    pub trait EdgeHash: DynHash + DynEq + Edge {}
+    pub struct EdgeSet(HashSet<Box<dyn EdgeHash>>);
+    //
+    #[derive(Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum EdgeType {
+        Buffr, // BCrx|MPSCrx -> RwLock buffer -> ?
+        Linkr, // Source: MPSCtx & MPSCrx <--> Destination: MPSCtx & MPSCrx
+        Sortr, // Blocking Channel/Content sorting task
+        Findr, // ?
+        Waitr, // Queue for readiness within a group of tasks
+    }
 
-    // Error Handling for Edges
+    // Error Handling for Edges TODO: More...
     #[derive(thiserror::Error, Debug)]
     pub enum EdgeError<T> {
         #[error("Error Sending Data")]
-        SendFail_mpsc(#[from] tokio::sync::mpsc::error::SendError<T>),
+        SendFailMPSC(#[from] tokio::sync::mpsc::error::SendError<T>),
         #[error("Error Recv Data")]
-        RecvFail_os(#[from] tokio::sync::oneshot::error::RecvError),
+        RecvFailOS(#[from] tokio::sync::oneshot::error::RecvError),
         #[error("Error Sending Data")]
-        SendFail_bs(#[from] tokio::sync::broadcast::error::SendError<T>),
+        SendFailBC(#[from] tokio::sync::broadcast::error::SendError<T>),
         #[error("Error Recv Data")]
-        RecvFail_bs(#[from] tokio::sync::broadcast::error::RecvError),
+        RecvFailBC(#[from] tokio::sync::broadcast::error::RecvError),
     }
-
-    ////////////////////////////////////////////////////////////////////
 }
-pub trait Craftable
-where
-    Self: Sized,
-{
-    fn init(/*Item */) -> Self;
-    fn conf<T>(&mut self) -> Self;
-    fn lock<T>(&mut self) -> Self;
-    fn free<T>(&mut self) -> Self;
-}
+///////////////////////////////////////////////////////////////////////////////
+pub mod Crafting {
+    use super::*;
+    use hashbrown::HashMap;
 
-pub trait Tinkerable<Elem>
-where
-    Self: Sized,
-{
-    type Elem<Attr>;
-    fn def<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
-    fn __def<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
-    fn __flip<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
-    fn __incr<Attr>(self, attr: &[Attr]) -> Result<Self, ()>;
-}
+    pub struct CraftWrap<Item, ParamSet> {
+        item: Option<Item>,
+        params: HashMap<ParamSet, Option<ParamSet>>,
+    }
+    impl<Item, ParamSet> CraftWrap<Item, ParamSet> {
+        pub fn new(item: Item) -> CraftWrap<Item, ParamSet> {
+            CraftWrap {
+                item: None,
+                params: HashMap::new(),
+            }
+        }
+    }
+    pub type FutFunc<T> = Pin<Box<dyn Future<Output = Result<T, ()>>>>;
 
+    pub trait Craftable
+    where
+        Self: Sized,
+    {
+        type Item;
+        type ParamSet;
+        fn init(/*  Item  */) -> CraftWrap<Self::Item, Self::ParamSet>;
+        fn def<T>(&mut self) -> CraftWrap<Self::Item, Self::ParamSet>;
+        fn __def<T>(&mut self) -> CraftWrap<Self::Item, Self::ParamSet>;
+        fn __sco<T>(&mut self) -> CraftWrap<Self::Item, Self::ParamSet>;
+        fn conf<T>(&mut self) -> CraftWrap<Self::Item, Self::ParamSet>;
+        fn lock<T>(&mut self) -> CraftWrap<Self::Item, Self::ParamSet>;
+        fn free<T>(&mut self) -> CraftWrap<Self::Item, Self::ParamSet>;
+    }
+}
 //mod crafting;
 
 // fn build_node(self) -> Result<Runtime, ()> {
@@ -133,26 +198,4 @@ where
 //         .build()
 //         .map_err(|_| ()) // TODO!
 //         .map(|rt| rt) // TODO!
-// }
-
-// #[derive(PartialEq, Eq, Hash)]
-// pub enum NodeInfo {
-//     Noid(u8), // Node ID
-//     Quid(u8), // Quick ID
-//     Ntid(u8), // Type ID
-//     Stid(u8), // State ID
-// }
-// #[derive(PartialEq, Eq, Hash)]
-// pub enum EdgeInfo {
-//     Liid(u8), // Edge ID
-//     Scid(u8), // Scope ID
-//     Paid(u8), // Pattern ID
-//     Ltid(u8), // Type ID
-// }
-// #[derive(PartialEq, Eq, Hash)]
-// pub enum DataInfo {
-//     Daid(u8), // Data ID
-//     Scid(u8), // Scope ID
-//     Foid(u8), // Format ID
-//     Dtid(u8), // Type ID
 // }
