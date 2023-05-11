@@ -1,6 +1,10 @@
-#![feature(maybe_uninit_ref)]
+// #![feature(maybe_uninit_ref)]
+#![feature(async_fn_in_trait)]
+#![feature(box_patterns)]
 #![feature(associated_type_bounds)]
 #![feature(trivial_bounds)]
+#![feature(stdsimd)]
+
 use futures::Future;
 #[allow(
     missing_docs,
@@ -11,66 +15,53 @@ use futures::Future;
 )]
 //
 use tokio::runtime::{Builder, Handle as RtHandle, Runtime};
-use tokio::time::{Duration, Instant};
-
+//
+use crate::craft::{DataCraft::*, EdgeCraft::*, NodeCraft::*};
 //
 use hashbrown::HashMap;
 use std::pin::Pin;
 //
-use thiserror::Error;
 
-mod attri; // Working Types as keys
-mod craft; // Base Declerations
-mod data; // Data portion of D.E.N's logistics model set
-mod edge; // Edge portion of D.E.N's logistics model set
-mod index; // Measuring, observations, and Smart pointers
-mod node; // Node portion of D.E.N's logistics model set
-mod param; // Like Option, but returns an ITEM either way
-use attri::*;
-use craft::*;
-use data::*;
-use edge::*;
-use index::*;
-use node::*;
-use param::*;
-//
-//
+pub mod biblio; // Measuring, observations, and Smart pointers
+pub mod craft; // Base Declerations
+pub mod data; // Data portion of D.E.N's logistics model set
+pub mod edge; // Edge portion of D.E.N's logistics model set
+pub mod node; // Node portion of D.E.N's logistics model set
+pub mod param; // Like Option, but returns an ITEM either way
+               //
+               //
+use biblio::NestIndex;
+
 #[cfg(test)]
 mod test;
 //
+pub const MAG_NUM: u8 = 6;
 //
+pub type FutFunc<T> = Pin<Box<dyn Future<Output = Result<T, ()>>>>;
 /////////////////////////////////////////////
 // Primary logic and work flow
 pub struct Matrices {
-    // Map of Node ID to a copy of individual node MatriSet
+    // Map of Node info to a copy of individual node MatriSet
     // objects. Any node operating in any scope must have a
-    // copy of their matrisync in this map
-    sigma: HashMap<Noid, Sigma>,
-    // Store the runtimes and tasks in their async function form
-    //mfuncs: [Func],
+    // copy of their Sigma in this map
+    sigma: HashMap<Node, Sigma>,
+    ////////////////////////////////////////////////////////////
     //
-    // Temp experiment /////////////////////////////////////////
-    mfunc: HashMap<Noid, Pin<Box<[FutFunc<()>]>>>,
-    // mfunc: Pin<Box<[FutFunc<()>]>>, //
+    //
+    mfunc: HashMap<Node, Pin<Box<[FutFunc<()>]>>>,
     ////////////////////////////////////////////////////////////
     // Store the runtime and tasks in their handle form to be
     // managed after their instance has been created
-    rhand: HashMap<Noid, Runtime>,
-    thand: HashMap<Noid, JoinHandle<()>>,
+    rhand: HashMap<Node, Runtime>,
+    thand: HashMap<Node, JoinHandle<()>>,
     ////////////////////////////////////////////////////////////
-    // Create/store a MPMC channel to be distrobuted among the
-    // nodes. For systematic purpose, this will be the _shared_
-    // copy while a seperate copy will be used for the Matrices
-    // deticated root channel.
-    matri: MatriSet<()>,
-    ////////////////////////////////////////////////////////////
-    //
-    // Multi Tally Tool using types as the index.
-    // type_indexer: TypeTally,
+    // Create/store a Broadcast Stream to be distrobuted among the
+    // nodes.
+    matri: MatriStream,
     ////////////////////////////////////////////////////////////
     //
     // Nested index to manage Node indices
-    noded: Nestindex::Nestindex,
+    noded: NestIndex::NestIndex,
 }
 
 impl Matrices {
@@ -80,8 +71,8 @@ impl Matrices {
             mfunc: HashMap::new(),
             rhand: HashMap::new(),
             thand: HashMap::new(),
-            matri: MatriSet::new().await,
-            noded: Nestindex::Nestindex::new(),
+            matri: MatriStream::new().await,
+            noded: NestIndex::NestIndex::new(),
         }
     }
     pub async fn add(&mut self, rtid: Option<u8>, futfunc: FutFunc<()>) -> Result<Sigma, ()> {
@@ -93,13 +84,15 @@ impl Matrices {
         let mut sigma = Sigma::new().await;
         if rtid.is_some() {
             let (rtid, noid) = self.noded.next_in(rtid.unwrap());
-            sigma.node = Noid::from(rtid, noid);
+            sigma.node = Node::from(rtid, noid);
         } else {
             let (rtid, noid) = self.noded.next();
-            sigma.node = Noid::from(rtid, noid);
+            sigma.node = Node::from(rtid, noid);
         }
+
         //
-        sigma.matrisync = self.matrisync.clone();
+        sigma.matristream = self.matri.clone();
+
         //
         let x = self
             .sigma
@@ -120,18 +113,14 @@ impl Matrices {
 //
 #[derive(Debug, Clone)]
 pub struct Sigma {
-    id: Noid,
-    matridex: RwLock<HashSet<Noid>>,
-    matriset: (BCtx<BCtype>, BCrx<BCtype>),
-    edgeset: EdgeSet,
-    // HashMap of IO ??
+    node: Node,
+    matristream: MatriStream,
 }
 impl Sigma {
     pub async fn new() -> Sigma {
         Sigma {
-            id: Noid::new(),
-            matrisync: MatriSet::new().await,
-            edgeset: EdgeSet::new(),
+            node: Node::new(),
+            matristream: MatriStream::new().await,
         }
     }
 }
@@ -148,7 +137,7 @@ pub(crate) mod Engine {
     pub fn get_set() -> () {
         ()
     }
-    macro_rules! GO {
-        () => {};
-    }
+    // macro_rules! GO {
+    //     () => {};
+    // }
 }

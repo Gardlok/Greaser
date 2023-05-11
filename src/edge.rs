@@ -1,32 +1,34 @@
 use std::any::TypeId;
+use tokio::io::AsyncWriteExt;
 use tokio::runtime::Handle;
+use tokio_util::io::StreamReader;
 
-use crate::craft::EdgeCraft::*;
+use crate::craft::{DataCraft::*, EdgeCraft::*, NodeCraft::*};
+use crate::MAG_NUM;
 
-impl<T> Clone for Matrisync<T>
-where
-    T: Clone,
+impl Clone for MatriStream
+// where
+//     Self: Copy,
 {
     fn clone(&self) -> Self {
-        Matrisync(self.0.clone(), self.0.subscribe(), RwLock::from(self.2))
+        MatriStream(self.0.clone(), self.0.subscribe())
     }
 }
 
-impl<T> Matrisync<T>
-where
-    T: Clone,
-{
+impl MatriStream {
     //
-    pub async fn new() -> Matrisync<T> {
-        let (tx, rx) = b_chan(32);
-        Matrisync(tx, rx, Matridex::new(hashbrown::HashSet::new()))
+    pub async fn new() -> MatriStream {
+        let cap = MAG_NUM.saturating_mul(100).into();
+        let (tx, rx) = channel(cap);
+        MatriStream(tx, rx)
     }
     //
-    pub async fn send(self, content: T) -> Result<usize, EdgeError<T>> {
-        self.0.send(content).map_err(EdgeError::SendFailBC)
+    pub async fn send<T: Send>(&mut self, content: T) -> Result<usize, Ser<()>> {
+        self.0.send(())
     }
     //
-    pub async fn recv(&mut self, content: T) -> Result<T, EdgeError<T>> {
-        self.1.recv().await.map_err(EdgeError::RecvFailBC)
+    pub async fn recv(&mut self, content: &dyn tokio::io::AsyncBufRead) -> Result<(), ()> {
+        &self.1;
+        Ok(())
     }
 }

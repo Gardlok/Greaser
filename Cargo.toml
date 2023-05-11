@@ -6,13 +6,22 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-bincode = "0.7.1"
+bincode = "1.3.3"
+bitvec = "1.0.1"
+enum-iterator = "1.4.1"
+enum-iterator-derive = "1.2.1"
 frunk = "0.4.1"
 futures = "0.3.28"
 futures-util = "0.3.28"
 hashbrown = "0.13.2"
+packed-integers = "0.1.2"
+packed_struct = { version = "0.10.1", features = ["alloc"] }
+polars = { version = "0.29.0", features = ["simd", "sort_multiple", "rows", "row_hash", "search_sorted", "rank", "rolling_window", "streaming", "polars-algo", "algo", "binary_encoding", "async", "arange", "diff", "dtype-full"] }
 thiserror = "1.0.40"
 tokio = { version = "1.27.0", features = ["rt", "sync", "time", "rt-multi-thread", "stats", "tracing", "io-std", "io-util", "process", "test-util"] }
-tokio-stream = { version = "0.1.12", features = ["sync"] }
+tokio-bitstream-io = "0.0.7"
+tokio-stream = { version = "0.1.14" }
 tokio-util = { version = "0.7.7", features = ["codec", "rt", "io-util", "time"] }
 tracing-futures = { version = "0.2.5", features = ["tokio"] }
 

@@ -18,9 +18,9 @@ pub async fn test_9result(i: usize) -> Result<(), ()> {
 }
 pub async fn test_sigma1(sigma: Option<Sigma>, i: usize) -> Result<(), ()> {
     let mut sigma = sigma.unwrap();
-    while let Ok(_) = sigma.matrisync.1.recv().await {
-        let _ = sigma.matrisync.0.send(());
-    }
+    // while let Ok(_) = sigma.matrisync.1.recv().await {
+    //     let _ = sigma.matrisync.0.send(());
+    // }
     Ok(())
 }
 
