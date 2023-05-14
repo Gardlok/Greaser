@@ -9,6 +9,7 @@ edition = "2021"
 async-bincode = "0.7.1"
 bincode = "1.3.3"
 bitvec = "1.0.1"
+bytes = "1.4.0"
 enum-iterator = "1.4.1"
 enum-iterator-derive = "1.2.1"
 frunk = "0.4.1"
@@ -18,6 +19,7 @@ hashbrown = "0.13.2"
 packed-integers = "0.1.2"
 packed_struct = { version = "0.10.1", features = ["alloc"] }
 polars = { version = "0.29.0", features = ["simd", "sort_multiple", "rows", "row_hash", "search_sorted", "rank", "rolling_window", "streaming", "polars-algo", "algo", "binary_encoding", "async", "arange", "diff", "dtype-full"] }
+serde = "1.0.163"
 thiserror = "1.0.40"
 tokio = { version = "1.27.0", features = ["rt", "sync", "time", "rt-multi-thread", "stats", "tracing", "io-std", "io-util", "process", "test-util"] }
 tokio-bitstream-io = "0.0.7"

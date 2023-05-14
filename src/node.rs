@@ -9,18 +9,43 @@ use std::hash::{Hash, Hasher};
 ///////////////////////////////////////////////////////////////
 
 use super::*;
+impl NodeOps for Node {
+    fn get_life_expectancy(&self) -> u8 {
+        self.attributes[0] as u8 + (self.attributes[1] as u8) << 1
+    }
+    fn set_life_expectancy(&mut self, life_expectancy: u8) {
+        self.attributes.set(0, life_expectancy & 1 != 0);
+        self.attributes.set(1, life_expectancy & 2 != 0);
+    }
+    fn get_state(&self) -> bool {
+        self.attributes[2]
+    }
+    fn set_state(&mut self, state: bool) {
+        self.attributes.set(2, state);
+    }
+    fn get_node_type(&self) -> u8 {
+        self.attributes[3] as u8 + (self.attributes[4] as u8) << 1
+    }
+    fn set_node_type(&mut self, node_type: u8) {
+        self.attributes.set(3, node_type & 1 != 0);
+
+        self.attributes.set(4, node_type & 2 != 0);
+    }
+    fn get_scope(&self) -> u8 {
+        self.attributes[5] as u8 + (self.attributes[6] as u8) << 1 + (self.attributes[7] as u8) << 2
+    }
+    fn set_scope(&mut self, scope: u8) {
+        self.attributes.set(5, scope & 1 != 0);
+        self.attributes.set(6, scope & 2 != 0);
+        self.attributes.set(7, scope & 4 != 0);
+    }
+}
 
 impl Node {
-    pub fn new() -> Node {
+    fn new() -> Node {
         Node {
-            rid: 0u8,
-            syn: Synaptics::empty(),
+            attributes: bitvec![0; 8],
         }
-    }
-    pub fn from(rid: u8) -> Node {
-        let mut n = Self::new();
-        n.rid = rid;
-        n
     }
 }
 

@@ -18,7 +18,6 @@ use tokio::runtime::{Builder, Handle as RtHandle, Runtime};
 //
 use crate::craft::{DataCraft::*, EdgeCraft::*, NodeCraft::*};
 //
-use hashbrown::HashMap;
 use std::pin::Pin;
 //
 
@@ -27,16 +26,103 @@ pub mod craft; // Base Declerations
 pub mod data; // Data portion of D.E.N's logistics model set
 pub mod edge; // Edge portion of D.E.N's logistics model set
 pub mod node; // Node portion of D.E.N's logistics model set
-pub mod param; // Like Option, but returns an ITEM either way
-               //
-               //
+              //
+              //
 use biblio::NestIndex;
 
 #[cfg(test)]
 mod test;
 //
 pub const MAG_NUM: u8 = 6;
-//
+
+use tokio::sync::broadcast;
+
+pub enum FactoryCommand {
+    CreateNode {
+        id: NodeId,
+        attributes: NodeAttributes,
+    },
+    UpdateNode {
+        id: NodeId,
+        attributes: NodeAttributes,
+    },
+    DeleteNode(NodeId),
+    CreateEdge {
+        from: NodeId,
+        to: NodeId,
+        attributes: EdgeAttributes,
+    },
+    UpdateEdge {
+        from: NodeId,
+        to: NodeId,
+        attributes: EdgeAttributes,
+    },
+    DeleteEdge {
+        from: NodeId,
+        to: NodeId,
+    },
+    NodeOp {
+        node_id: NodeId,
+        operation: NodeOps,
+    },
+    BeginScope(Scope),
+    EndScope(Scope),
+    Sleep,
+    Wake,
+    Query(QueryType),
+    // Add more commands as needed...
+}
+
+    // Existing methods...TODO
+
+    pub async fn listen_to_broadcast(&mut self) {
+        while let Ok(command) = self.receiver.recv().await {
+            match command {
+                FactoryCommand::CreateClient { interest, client } => {
+                    self.clients.insert(interest.clone(), client);
+                    let handle = self.run_client(&interest).await;
+                    self.running_clients.insert(interest, handle);
+                }
+                FactoryCommand::RunClient { interest } => {
+                    if let Some(handle) = self.run_client(&interest).await {
+                        self.running_clients.insert(interest, handle);
+                    }
+                }
+                FactoryCommand::StopClient { interest } => {
+                    if let Some(handle) = self.running_clients.remove(&interest) {
+                        handle.abort();
+                    }
+                }
+                FactoryCommand::CreateTemplate { interest, template } => {
+                    self.templates.insert(interest, template);
+                }
+            }
+        }
+    }
+
+    async fn run_client(&mut self, interest: &Array2<u8>) -> Option<tokio::task::JoinHandle<()>> {
+        if let Some(client) = self.clients.get(interest) {
+            // Some(tokio::spawn(async move {
+
+            //     // Run client...TODO
+            // }))
+        } else {
+            None
+        }
+    }
+}
+
+// let mask: u32 = /* some value that represents the bits you're interested in */;
+// let handlers = HashMap::new();
+// populate handlers with functions or data for each possible value of the mask
+// for message in message_stream {
+//     let node = message.get_node();
+//     let masked_key = node.get_first_important_part() & mask;
+//     if let Some(handler) = handlers.get(&masked_key) {
+//             // process message using handler
+//         }
+// }
+
 pub type FutFunc<T> = Pin<Box<dyn Future<Output = Result<T, ()>>>>;
 /////////////////////////////////////////////
 // Primary logic and work flow
@@ -49,15 +135,20 @@ pub struct Matrices {
     //
     //
     mfunc: HashMap<Node, Pin<Box<[FutFunc<()>]>>>,
+    // Channels for incoming commands and outgoing responses.
+    command_rx: Receiver<FactoryCommand>,
+    response_tx: Sender<FactoryResponse>,
     ////////////////////////////////////////////////////////////
     // Store the runtime and tasks in their handle form to be
     // managed after their instance has been created
     rhand: HashMap<Node, Runtime>,
     thand: HashMap<Node, JoinHandle<()>>,
     ////////////////////////////////////////////////////////////
+    // Maintains a list of all active edges.
+    edges: HashMap<(NodeId, NodeId), Edge>,
     // Create/store a Broadcast Stream to be distrobuted among the
     // nodes.
-    matri: MatriStream,
+    matri: MatriSync,
     ////////////////////////////////////////////////////////////
     //
     // Nested index to manage Node indices
@@ -71,7 +162,7 @@ impl Matrices {
             mfunc: HashMap::new(),
             rhand: HashMap::new(),
             thand: HashMap::new(),
-            matri: MatriStream::new().await,
+            matri: MatriSync::new().await,
             noded: NestIndex::NestIndex::new(),
         }
     }
@@ -84,10 +175,10 @@ impl Matrices {
         let mut sigma = Sigma::new().await;
         if rtid.is_some() {
             let (rtid, noid) = self.noded.next_in(rtid.unwrap());
-            sigma.node = Node::from(rtid, noid);
+            sigma.node = Node::from(rtid);
         } else {
             let (rtid, noid) = self.noded.next();
-            sigma.node = Node::from(rtid, noid);
+            sigma.node = Node::from(rtid);
         }
 
         //
@@ -115,14 +206,6 @@ impl Matrices {
 pub struct Sigma {
     node: Node,
     matristream: MatriStream,
-}
-impl Sigma {
-    pub async fn new() -> Sigma {
-        Sigma {
-            node: Node::new(),
-            matristream: MatriStream::new().await,
-        }
-    }
 }
 
 //////////////////////////////////////////////////
